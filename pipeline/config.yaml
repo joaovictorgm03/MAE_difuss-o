@@ -1,0 +1,139 @@
+# =============================================================================
+# MAM-E lesion synthesis - todos os hiperparametros ajustaveis
+# Referencia: Montoya-del-Angel et al., "MAM-E: Mammographic synthetic image
+# generation with diffusion models" (arXiv:2311.09822v1 / Sensors 24(7):2076)
+# =============================================================================
+
+paths:
+  input_dir: ../sem_anomalia          # relativo a raiz de mame_lesion/
+  output_dir: outputs
+  model_id: Likalto4/mammo_lesion-inpainting   # pesos oficiais do artigo
+  model_local_path: null              # snapshot local; null = resolve pelo cache HF
+
+preprocessing:
+  canvas_size: 1024                   # resolucao de trabalho e de saida
+  model_resolution: 512               # resolucao do modelo (VAE -> latente 64x64)
+  framing: center_crop                # center_crop (artigo) | pad (preserva a mama inteira)
+  max_value: null                     # saturacao no uint16 -> uint8 (3500 Siemens, 4095 Hologic)
+  breast_threshold: 10                # limiar de segmentacao do tecido
+  detector_long_side_mm: 295.0        # detector 24x30 cm, usado para estimar mm/px
+  mm_per_px: null                     # sobrescreve a estimativa acima
+
+lesion:
+  # O modelo foi ajustado com um unico prompt generico para todas as imagens de
+  # treino (artigo, secao 2.2), portanto o texto praticamente nao carrega o tipo
+  # da lesao. O tipo e controlado pela geometria da regiao e pelos parametros de
+  # difusao, definidos nos presets abaixo.
+  prompt: "a mammogram with a lesion"
+  negative_prompt: ""
+  lesion_type: mass                   # mass | nodule | density
+  mask_shape: rect                    # rect (igual ao treino) | ellipse
+  snap_to_latent: true                # alinha a caixa a grade de 16 px do canvas
+  min_coverage: 0.98                  # fracao minima da caixa dentro da mama
+  types:
+    mass:
+      diameter_mm_range: [10.0, 25.0]
+      aspect_range: [0.80, 1.25]
+      guidance_scale: 4.0
+      num_inference_steps: 40
+      detail_transfer: 0.80
+      lesion_gain: 1.00
+      description: massa focal densa de bordas definidas
+    nodule:
+      diameter_mm_range: [5.0, 12.0]
+      aspect_range: [0.85, 1.18]
+      guidance_scale: 4.5
+      num_inference_steps: 40
+      detail_transfer: 0.75
+      lesion_gain: 1.00
+      description: nodulo pequeno e circunscrito
+    density:
+      diameter_mm_range: [20.0, 40.0]
+      aspect_range: [0.60, 1.60]
+      guidance_scale: 3.5
+      num_inference_steps: 40
+      detail_transfer: 0.85
+      lesion_gain: 0.60
+      description: assimetria focal / densidade difusa
+    # Tipos do modo nativo com LoRA (native_window.enabled: true). O tamanho vem
+    # do catalogo de recortes reais do treino, entao diameter_mm_range so e usado
+    # com native_window.size_source: preset. O prompt e o do ajuste do LoRA.
+    birads4:
+      diameter_mm_range: [10.0, 30.0]
+      aspect_range: [0.70, 1.40]
+      guidance_scale: 4.0
+      num_inference_steps: 40
+      detail_transfer: 0.0
+      lesion_gain: 1.00
+      description: lesao suspeita BI-RADS 4 (LoRA)
+      prompt: "a mammogram with a birads 4 lesion"
+    birads5:
+      diameter_mm_range: [10.0, 40.0]
+      aspect_range: [0.70, 1.40]
+      guidance_scale: 4.0
+      num_inference_steps: 40
+      detail_transfer: 0.0
+      lesion_gain: 1.00
+      description: lesao altamente suspeita BI-RADS 5 (LoRA)
+      prompt: "a mammogram with a birads 5 lesion"
+
+diffusion:
+  num_inference_steps: 40             # padrao do repositorio oficial
+  guidance_scale: 4.0
+  scheduler: dpmsolver                # dpmsolver (repo oficial) | ddim (checkpoint)
+  seed: 1337
+  dtype: float16
+  num_images_per_prompt: 1
+  attention_slicing: true
+
+composition:
+  mode: hybrid                        # hybrid (so a ROI muda) | global (artigo literal)
+  blend: feather                      # feather | poisson | hard
+  feather_px: 24
+  detail_transfer: 0.80               # reinjecao de textura do detector na ROI
+  detail_sigma: 1.5
+  border_offset_correction: true
+  lesion_gain: 1.0                    # ganho do sinal da lesao (<1 = mais sutil)
+
+native_window:
+  # Gera a lesao numa janela em resolucao original em vez do canvas reduzido.
+  # Necessario para BI-RADS 4/5: no canvas o detalhe fino da lesao nao sobrevive
+  # (docs/FINETUNING.md). Com lora_path, a geometria gravada no treino prevalece.
+  enabled: false
+  context_factor: 2.0                 # lado da janela / maior lado da lesao
+  min_scale: 0.75                     # lesao nunca reduzida abaixo disso: o contexto encolhe
+  min_context: 1.25                   # contexto minimo quando o teto de reducao atua
+  mask_margin_frac: 0.10              # margem da mascara em torno da lesao
+  feather_frac: 0.08                  # transicao da composicao
+  margin_texture_sigma: 3.0           # textura nativa na margem em volta da lesao (0 = desliga)
+  density_floor: -3.0                 # lesao nao escurece o tecido alem de 3 niveis (null = desliga)
+  paste_feather_frac: 0.15            # transicao da colagem no treino (analise_colagem.py)
+  lora_path: null                     # ex.: treinos/birads_lora_v1
+  lora_scale: 1.0
+  guidance: null                      # null = melhor_guidance do treino, ou a do preset
+  size_source: catalog                # catalog (tamanhos reais) | preset
+
+output:
+  size: 1024
+  save_grayscale: true
+  save_mask: true
+  save_metadata: true
+  save_comparison: true
+
+quality:
+  ring_px: 40                         # anel de tecido de referencia ao redor da ROI
+  glcm_distances: [1, 3, 5]
+  glcm_levels: 64
+  patch_size: 96                      # recorte centrado na lesao
+  probe_patch_size: 40                # recorte contido na area reconstruida
+  n_control_patches: 200
+  dinov2_id: facebook/dinov2-base
+  dinov2_local_path: null
+  cad_scales_mm: [5.0, 8.0, 12.0, 18.0, 25.0]
+  cad_top_k: 10
+  # Portao de QC da geracao em lote: o modelo as vezes so reconstroi o tecido
+  # sem inserir lesao (contraste <= 0). Esses casos sao regerados com outra
+  # semente ate qc_max_attempts.
+  qc_enabled: true
+  qc_max_attempts: 3
+  qc_required: [weber_contrast, cnr, outside_changed_fraction, roi_delta_ratio]

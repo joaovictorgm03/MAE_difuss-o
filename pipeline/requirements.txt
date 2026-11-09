@@ -1,0 +1,40 @@
+# Dependencias do pipeline de lesoes sinteticas
+# ----------------------------------------------------------------------------
+# Versoes exatas validadas nesta maquina (Ubuntu 22.04, Python 3.10.12,
+# RTX 4090, driver CUDA 12.4). Instalacao:
+#
+#   python3 -m virtualenv .venv
+#   .venv/bin/pip install torch==2.6.0 torchvision==0.21.0 \
+#        --index-url https://download.pytorch.org/whl/cu124
+#   .venv/bin/pip install -r requirements.txt
+#
+# torch/torchvision ficam FORA deste arquivo de proposito: a roda com CUDA vem
+# de um indice separado da PyPI. Instale-os antes, com o comando acima.
+# ----------------------------------------------------------------------------
+
+# --- nucleo: difusao e modelo ---
+diffusers==0.40.0            # StableDiffusionInpaintPipeline
+transformers==5.17.0         # encoder de texto CLIP do SD v1-5
+accelerate==1.15.0           # carregamento eficiente dos pesos
+safetensors==0.8.0           # formato dos pesos do checkpoint
+huggingface_hub==1.30.0      # download/cache do checkpoint
+peft==0.18.1                 # adaptadores LoRA (ajuste fino BI-RADS e inferencia com --lora)
+
+# --- imagem ---
+opencv-python-headless==5.0.0.93   # segmentacao, morfologia, reamostragem
+scikit-image==0.25.2               # GLCM, SSIM, metricas de textura
+pillow==12.3.0                     # leitura/escrita PNG 8 e 16 bits
+pydicom==3.0.2                     # entrada DICOM (VOI LUT, PixelSpacing)
+
+# --- numerico e relatorios ---
+numpy==2.2.6
+scipy==1.15.3
+scikit-learn==1.7.2          # sondas lineares da bateria de qualidade
+matplotlib==3.10.9           # figuras dos relatorios e overlays
+PyYAML==6.0.3                # leitura do config.yaml
+
+# --- armazenamento remoto (opcional: so para scripts/minio_cli.py) ---
+minio==7.2.20                  # cliente S3 do MinIO do CEIA (mamelesion/storage.py)
+
+# --- interface interativa (opcional: so para gui/app.py) ---
+gradio==6.27.0

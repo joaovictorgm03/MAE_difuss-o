@@ -1,0 +1,32 @@
+# ambiente e caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# credenciais
+.env
+.env.*
+!.env.minio.example
+minio.txt
+
+# dados de pacientes (nunca versionar)
+sem_anomalia/
+birads_1/
+birads_4/
+birads_5/
+_download_drive/
+
+# saidas geradas
+mamas_com_lesao/
+dataset_escolhido*/
+*.zip
+pipeline/outputs/
+pipeline/treinos/
+
+# repositorio de terceiros e artigo
+pipeline/referencia/
+
+# logs
+*.log
+*.jsonl
